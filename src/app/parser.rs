@@ -1,0 +1,139 @@
+use crate::model::{Item, Status};
+
+fn parse_items(line: &str) -> Vec<Item> {
+    let mut items = vec![];
+    let mut block = vec![];
+    for l in line.lines() {
+        if l.starts_with("- ") {
+            if !block.is_empty() {
+                // 次ブロックを処理する前に溜めていたブロックをパースする
+                items.push(parse_item(block.join("\n").as_str()));
+            }
+            block.clear();
+            block.push(l);
+        } else {
+            block.push(l);
+        }
+    }
+    if !block.is_empty() {
+        items.push(parse_item(block.join("\n").as_str()));
+    }
+    items
+}
+
+fn parse_item(line: &str) -> Item {
+    let tokens = line.split_whitespace().collect::<Vec<_>>();
+    let title = tokens[1];
+    let id = tokens[2];
+    let status = line
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("状態::"))
+        .map(str::trim)
+        .and_then(|status_field| match status_field {
+            "未着手" => Some(Status::未着手),
+            "着手中" => Some(Status::着手中),
+            "待ち" => Some(Status::待ち),
+            "順延" => Some(Status::順延),
+            "完了" => Some(Status::完了),
+            _ => None,
+        });
+    let mut fields = vec![];
+    for l in line.lines().skip(1) {
+        let l = l.trim();
+        if let Some((k, v)) = l.split_once("::") {
+            let key = k.trim().to_string();
+            let value = v.trim().to_string();
+            if key == "状態" {
+                continue;
+            }
+            fields.push((key, value));
+        }
+    }
+
+    Item {
+        id: id.trim_start_matches("^").into(),
+        title: title.into(),
+        status,
+        fields,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 単一のグループとアイテムをパースしてグループ1つとアイテム1つを取り出す() {
+        let raw = "### test_group1\n- 資料確認 ^t-1\n  状態:: 待ち";
+        let group = parse_group(raw);
+
+        assert_eq!(group.heading, "test_group1")
+    }
+
+    #[test]
+    fn 単一のアイテム行からタイトルとidを取り出す() {
+        let item = parse_item("- ライブラリ調査 ^t-0701-1");
+
+        assert_eq!(item.title, "ライブラリ調査");
+        assert_eq!(item.id, "t-0701-1");
+    }
+
+    #[test]
+    fn 状態付きのアイテムから状態を取り出す() {
+        let item = parse_item("- 資料確認 ^t-0701-3\n  状態:: 待ち");
+
+        assert_eq!(item.status, Some(Status::待ち));
+    }
+
+    #[test]
+    fn 任意フィールドをfieldsに順序保持で格納する() {
+        let item = parse_item(
+            "- タスク着手前に目的を再確認した ^r-0701-1\n  種別:: 良かった\n  なぜ:: 確認するため",
+        );
+
+        assert_eq!(
+            item.fields,
+            vec![
+                ("種別".to_string(), "良かった".to_string()),
+                ("なぜ".to_string(), "確認するため".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn 状態はfieldsに含めない() {
+        let item = parse_item("- x ^t-1\n  状態:: 待ち\n  種別:: 良かった");
+
+        assert_eq!(item.status, Some(Status::待ち));
+        assert_eq!(
+            item.fields,
+            vec![("種別".to_string(), "良かった".to_string())]
+        );
+    }
+
+    #[test]
+    fn 複数のアイテムを分割してそれぞれパースする() {
+        let items =
+            parse_items("- ライブラリ調査 ^t-1\n  状態:: 着手中\n- 設定修正 ^t-2\n  状態:: 未着手");
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "t-1");
+        assert_eq!(items[0].status, Some(Status::着手中));
+        assert_eq!(items[1].id, "t-2");
+        assert_eq!(items[1].status, Some(Status::未着手));
+    }
+
+    #[test]
+    fn フィールドが複数行あってもアイテムは1つ生成される() {
+        let items = parse_items("- タスク ^t-1\n  状態:: 着手中\n  ゴール:: 確認する");
+
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn フィールドが無い場合でもアイテムは1つ生成される() {
+        let items = parse_items("- タスク ^t-1");
+
+        assert_eq!(items.len(), 1);
+    }
+}
