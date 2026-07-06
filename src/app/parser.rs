@@ -1,4 +1,24 @@
-use crate::model::{Item, Status};
+use crate::model::{Group, Item, Status};
+
+fn parse_group(line: &str) -> Group {
+    let mut heading = "";
+    let mut item_block: Vec<&str> = vec![];
+    for line in line.lines() {
+        if line.starts_with("### ") {
+            let body = line.strip_prefix("###");
+            heading = body.unwrap_or("unknown").trim();
+        } else {
+            item_block.push(line);
+        }
+    }
+
+    let items = parse_items(item_block.join("\n").as_str());
+
+    Group {
+        heading: heading.to_string(),
+        items,
+    }
+}
 
 fn parse_items(line: &str) -> Vec<Item> {
     let mut items = vec![];
@@ -67,7 +87,8 @@ mod tests {
         let raw = "### test_group1\n- 資料確認 ^t-1\n  状態:: 待ち";
         let group = parse_group(raw);
 
-        assert_eq!(group.heading, "test_group1")
+        assert_eq!(group.heading, "test_group1");
+        assert_eq!(group.items.len(), 1);
     }
 
     #[test]
