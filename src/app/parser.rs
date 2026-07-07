@@ -1,4 +1,25 @@
 use crate::model::{Group, Item, Status};
+fn parse_groups(line: &str) -> Vec<Group> {
+    let mut groups = vec![];
+    let mut group_block = vec![];
+
+    for l in line.lines() {
+        if l.starts_with("###") {
+            if !group_block.is_empty() {
+                groups.push(parse_group(group_block.join("\n").as_str()));
+            }
+            group_block.clear();
+            group_block.push(l);
+        } else {
+            group_block.push(l);
+        }
+    }
+    if !group_block.is_empty() {
+        groups.push(parse_group(group_block.join("\n").as_str()));
+    }
+
+    groups
+}
 
 fn parse_group(line: &str) -> Group {
     let mut heading = "";
@@ -81,6 +102,18 @@ fn parse_item(line: &str) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn 複数のグループとアイテムをパースしてグループとアイテムの組み合わせができること() {
+        let raw = "### test_group1\n- 資料確認 ^t-1\n  状態:: 待ち\n### test_group2\n- README確認 ^t-2\n  状態:: 着手中";
+        let groups = parse_groups(raw);
+
+        assert_eq!(groups[0].heading, "test_group1");
+        assert_eq!(groups[0].items.len(), 1);
+        assert_eq!(groups[1].heading, "test_group2");
+        assert_eq!(groups[1].items.len(), 1);
+    }
 
     #[test]
     fn 単一のグループとアイテムをパースしてグループ1つとアイテム1つを取り出す() {
