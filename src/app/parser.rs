@@ -1,5 +1,27 @@
 use crate::model::{Group, Item, Lane, Status};
 
+fn parse_lanes(line: &str) -> Vec<Lane> {
+    let mut lanes = vec![];
+    let mut lane_block = vec![];
+
+    for l in line.lines() {
+        if l.starts_with("##") && !l.starts_with("### ") {
+            if !lane_block.is_empty() {
+                lanes.push(parse_lane(lane_block.join("\n").as_str()));
+            }
+            lane_block.clear();
+            lane_block.push(l);
+        } else {
+            lane_block.push(l);
+        }
+    }
+    if !lane_block.is_empty() {
+        lanes.push(parse_lane(lane_block.join("\n").as_str()));
+    }
+
+    lanes
+}
+
 fn parse_lane(line: &str) -> Lane {
     let mut title = "hoge";
     let mut group_block = vec![];
@@ -124,6 +146,20 @@ fn parse_item(line: &str) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 複数のレーンをパースしてレーンとグループの組み合わせができること() {
+        let raw = "## 仕事管理\n### mugenup\n- 反社チェック確認 ^t-1\n  状態:: 待ち\n## 人間管理\n### 振り返り・気付き\n- 定例会で報告できた ^r-1\n  種別:: 良かった";
+        let lanes = parse_lanes(raw);
+
+        assert_eq!(lanes.len(), 2);
+        assert_eq!(lanes[0].title, "仕事管理");
+        assert_eq!(lanes[0].groups[0].heading, "mugenup");
+        assert_eq!(lanes[0].groups[0].items[0].id, "t-1");
+        assert_eq!(lanes[1].title, "人間管理");
+        assert_eq!(lanes[1].groups[0].heading, "振り返り・気付き");
+        assert_eq!(lanes[1].groups[0].items[0].id, "r-1");
+    }
 
     #[test]
     fn 単一のレーンとグループとアイテムをパースして各種要素が取り出せること() {
