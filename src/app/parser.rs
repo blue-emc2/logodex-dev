@@ -1,4 +1,26 @@
-use crate::model::{Group, Item, Status};
+use crate::model::{Group, Item, Lane, Status};
+
+fn parse_lane(line: &str) -> Lane {
+    let mut title = "hoge";
+    let mut group_block = vec![];
+
+    for line in line.lines() {
+        if line.starts_with("## ") {
+            let body = line.strip_prefix("##");
+            title = body.unwrap_or("unknown").trim();
+        } else {
+            group_block.push(line);
+        }
+    }
+
+    let groups = parse_groups(group_block.join("\n").as_str());
+
+    Lane {
+        title: title.to_string(),
+        groups,
+    }
+}
+
 fn parse_groups(line: &str) -> Vec<Group> {
     let mut groups = vec![];
     let mut group_block = vec![];
@@ -103,6 +125,19 @@ fn parse_item(line: &str) -> Item {
 mod tests {
     use super::*;
 
+    #[test]
+    fn 単一のレーンとグループとアイテムをパースして各種要素が取り出せること() {
+        let raw = "## 個人プロジェクト\n### test_group1\n- モデル設計 ^t-2\n  状態:: 着手中";
+        let lane = parse_lane(raw);
+
+        assert_eq!(lane.title, "個人プロジェクト");
+        assert_eq!(lane.groups.len(), 1);
+        assert_eq!(lane.groups[0].heading, "test_group1");
+        assert_eq!(lane.groups[0].items.len(), 1);
+        assert_eq!(lane.groups[0].items[0].title, "モデル設計");
+        assert_eq!(lane.groups[0].items[0].id, "t-2");
+        assert_eq!(lane.groups[0].items[0].status, Some(Status::着手中));
+    }
 
     #[test]
     fn 複数のグループとアイテムをパースしてグループとアイテムの組み合わせができること() {
