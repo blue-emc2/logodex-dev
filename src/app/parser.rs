@@ -1,4 +1,51 @@
-use crate::model::{Group, Item, Lane, Status};
+use std::collections::HashMap;
+
+use chrono::{Local, NaiveDate};
+
+use crate::model::{Frontmatter, Group, Item, Lane, Status};
+
+fn parse_frontmatter(header_text: &str) -> Frontmatter {
+    let mut date = NaiveDate::parse_from_str("2026-01-01", "%Y-%m-%d")
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_local_timezone(Local)
+        .single()
+        .unwrap();
+    let mut kind = String::new();
+    let mut extra_map = HashMap::new();
+    let headers = &header_text.split("---").collect::<Vec<_>>();
+
+    for text in headers[1].lines() {
+        dbg!(&text);
+        match text.split_once(":") {
+            Some((key, value)) => {
+                match key.trim() {
+                    "date" => {
+                        date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
+                            .unwrap()
+                            .and_hms_opt(10, 00, 00)
+                            .unwrap()
+                            .and_local_timezone(Local)
+                            .single()
+                            .unwrap();
+                    }
+                    "type" => kind = String::from(value.trim()),
+                    _ => {
+                        extra_map.insert(String::from(key.trim()), String::from(value.trim()));
+                    }
+                };
+            }
+            None => {}
+        };
+    }
+
+    Frontmatter {
+        date,
+        kind,
+        extra: extra_map,
+    }
+}
 
 fn parse_lanes(line: &str) -> Vec<Lane> {
     let mut lanes = vec![];
@@ -146,6 +193,36 @@ fn parse_item(line: &str) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frontmatterからdateとtypeを取り出す() {
+        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n## 仕事管理";
+        let frontmatter = parse_frontmatter(raw);
+
+        assert_eq!(
+            frontmatter.date.date_naive(),
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 26).unwrap()
+        );
+        assert_eq!(frontmatter.kind, "logbook");
+    }
+
+    #[test]
+    fn date_type以外のキーはextraに格納する() {
+        let raw = "---\ndate: 2026-06-26\ntype: logbook\nmood: 良い\n体調: 普通\n---";
+        let frontmatter = parse_frontmatter(raw);
+
+        assert_eq!(frontmatter.extra.get("mood"), Some(&"良い".to_string()));
+        assert_eq!(frontmatter.extra.get("体調"), Some(&"普通".to_string()));
+        assert_eq!(frontmatter.extra.len(), 2);
+    }
+
+    #[test]
+    fn 本文の行はfrontmatterとして読まない() {
+        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n## 仕事管理\n状態:: 待ち";
+        let frontmatter = parse_frontmatter(raw);
+
+        assert!(frontmatter.extra.is_empty());
+    }
 
     #[test]
     fn 複数のレーンをパースしてレーンとグループの組み合わせができること() {

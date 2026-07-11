@@ -16,10 +16,10 @@ struct Logbook {
     lanes: Vec<Lane>,
 }
 
-struct Frontmatter {
-    date: DateTime<Local>,
-    kind: String,
-    extra: HashMap<String, String>,
+pub struct Frontmatter {
+    pub date: DateTime<Local>,
+    pub kind: String,
+    pub extra: HashMap<String, String>,
 }
 
 pub struct Lane {
