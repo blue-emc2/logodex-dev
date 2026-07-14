@@ -17,7 +17,6 @@ fn parse_frontmatter(header_text: &str) -> Frontmatter {
     let headers = &header_text.split("---").collect::<Vec<_>>();
 
     for text in headers[1].lines() {
-        dbg!(&text);
         match text.split_once(":") {
             Some((key, value)) => {
                 match key.trim() {
