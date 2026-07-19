@@ -11,9 +11,9 @@ pub enum Status {
     完了,
 }
 
-struct Logbook {
-    frontmatter: Frontmatter,
-    lanes: Vec<Lane>,
+pub struct Logbook {
+    pub frontmatter: Frontmatter,
+    pub lanes: Vec<Lane>,
 }
 
 pub struct Frontmatter {

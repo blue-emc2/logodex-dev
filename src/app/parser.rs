@@ -2,7 +2,44 @@ use std::collections::HashMap;
 
 use chrono::{Local, NaiveDate};
 
-use crate::model::{Frontmatter, Group, Item, Lane, Status};
+use crate::model::{Frontmatter, Group, Item, Lane, Logbook, Status};
+
+enum ParseState {
+    BeforeFrontmatter,
+    InFrontmatter,
+    Body,
+}
+
+fn parse(raw: &str) -> Logbook {
+    let mut state = ParseState::BeforeFrontmatter;
+    let mut blocks = vec![];
+    let mut body_blocks = vec![];
+
+    for line in raw.lines() {
+        match &state {
+            ParseState::BeforeFrontmatter if line.trim() == "---" => {
+                blocks.push(line);
+                state = ParseState::InFrontmatter
+            }
+            ParseState::BeforeFrontmatter => state = ParseState::Body,
+            ParseState::InFrontmatter => {
+                // Frontmatterが終わりをしめす合図
+                if line.trim() == "---" {
+                    state = ParseState::Body
+                }
+                blocks.push(line.trim())
+            }
+            ParseState::Body => {
+                body_blocks.push(line);
+            }
+        }
+    }
+
+    let frontmatter = parse_frontmatter(blocks.join("\n").as_str());
+    let lanes = parse_lanes(body_blocks.join("\n").as_str());
+
+    Logbook { frontmatter, lanes }
+}
 
 fn parse_frontmatter(header_text: &str) -> Frontmatter {
     let mut date = NaiveDate::parse_from_str("2026-01-01", "%Y-%m-%d")
@@ -221,6 +258,26 @@ mod tests {
         let frontmatter = parse_frontmatter(raw);
 
         assert!(frontmatter.extra.is_empty());
+    }
+
+    #[test]
+    fn parseでfrontmatterとlaneの両方を取り出す() {
+        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n## 仕事管理\n### mugenup\n- 反社チェック確認 ^t-1\n  状態:: 待ち\n## 人間管理\n### 振り返り・気付き\n- 定例会で報告できた ^r-1\n  種別:: 良かった";
+        let logbook = parse(raw);
+
+        // frontmatter が取れていること
+        assert_eq!(
+            logbook.frontmatter.date.date_naive(),
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 26).unwrap()
+        );
+        assert_eq!(logbook.frontmatter.kind, "logbook");
+
+        // lanes が取れていること（frontmatter 部分がレーンに混ざっていないこと）
+        assert_eq!(logbook.lanes.len(), 2);
+        assert_eq!(logbook.lanes[0].title, "仕事管理");
+        assert_eq!(logbook.lanes[0].groups[0].items[0].id, "t-1");
+        assert_eq!(logbook.lanes[1].title, "人間管理");
+        assert_eq!(logbook.lanes[1].groups[0].items[0].id, "r-1");
     }
 
     #[test]
