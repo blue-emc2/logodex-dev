@@ -35,13 +35,13 @@ fn parse(raw: &str) -> Logbook {
         }
     }
 
-    let frontmatter = parse_frontmatter(blocks.join("\n").as_str());
-    let lanes = parse_lanes(body_blocks.join("\n").as_str());
+    let frontmatter = parse_frontmatter(&blocks);
+    let lanes = parse_lanes(&body_blocks);
 
     Logbook { frontmatter, lanes }
 }
 
-fn parse_frontmatter(header_text: &str) -> Frontmatter {
+fn parse_frontmatter(header_text: &[&str]) -> Frontmatter {
     let mut date = NaiveDate::parse_from_str("2026-01-01", "%Y-%m-%d")
         .unwrap()
         .and_hms_opt(0, 0, 0)
@@ -51,9 +51,8 @@ fn parse_frontmatter(header_text: &str) -> Frontmatter {
         .unwrap();
     let mut kind = String::new();
     let mut extra_map = HashMap::new();
-    let headers = &header_text.split("---").collect::<Vec<_>>();
 
-    for text in headers[1].lines() {
+    for &text in header_text {
         match text.split_once(":") {
             Some((key, value)) => {
                 match key.trim() {
@@ -83,33 +82,33 @@ fn parse_frontmatter(header_text: &str) -> Frontmatter {
     }
 }
 
-fn parse_lanes(line: &str) -> Vec<Lane> {
+fn parse_lanes(lines: &[&str]) -> Vec<Lane> {
     let mut lanes = vec![];
     let mut lane_block = vec![];
 
-    for l in line.lines() {
-        if l.starts_with("##") && !l.starts_with("### ") {
+    for &line in lines {
+        if line.starts_with("##") && !line.starts_with("### ") {
             if !lane_block.is_empty() {
-                lanes.push(parse_lane(lane_block.join("\n").as_str()));
+                lanes.push(parse_lane(&lane_block));
             }
             lane_block.clear();
-            lane_block.push(l);
+            lane_block.push(line);
         } else {
-            lane_block.push(l);
+            lane_block.push(line);
         }
     }
     if !lane_block.is_empty() {
-        lanes.push(parse_lane(lane_block.join("\n").as_str()));
+        lanes.push(parse_lane(&lane_block));
     }
 
     lanes
 }
 
-fn parse_lane(line: &str) -> Lane {
-    let mut title = "hoge";
+fn parse_lane(lines: &[&str]) -> Lane {
+    let mut title = "";
     let mut group_block = vec![];
 
-    for line in line.lines() {
+    for &line in lines {
         if line.starts_with("## ") {
             let body = line.strip_prefix("##");
             title = body.unwrap_or("unknown").trim();
@@ -118,7 +117,7 @@ fn parse_lane(line: &str) -> Lane {
         }
     }
 
-    let groups = parse_groups(group_block.join("\n").as_str());
+    let groups = parse_groups(&group_block);
 
     Lane {
         title: title.to_string(),
@@ -126,32 +125,32 @@ fn parse_lane(line: &str) -> Lane {
     }
 }
 
-fn parse_groups(line: &str) -> Vec<Group> {
+fn parse_groups(lines: &[&str]) -> Vec<Group> {
     let mut groups = vec![];
     let mut group_block = vec![];
 
-    for l in line.lines() {
-        if l.starts_with("###") {
+    for line in lines {
+        if line.starts_with("###") {
             if !group_block.is_empty() {
-                groups.push(parse_group(group_block.join("\n").as_str()));
+                groups.push(parse_group(&group_block));
             }
             group_block.clear();
-            group_block.push(l);
+            group_block.push(line);
         } else {
-            group_block.push(l);
+            group_block.push(line);
         }
     }
     if !group_block.is_empty() {
-        groups.push(parse_group(group_block.join("\n").as_str()));
+        groups.push(parse_group(&group_block));
     }
 
     groups
 }
 
-fn parse_group(line: &str) -> Group {
+fn parse_group(lines: &[&str]) -> Group {
     let mut heading = "";
     let mut item_block: Vec<&str> = vec![];
-    for line in line.lines() {
+    for &line in lines {
         if line.starts_with("### ") {
             let body = line.strip_prefix("###");
             heading = body.unwrap_or("unknown").trim();
@@ -160,7 +159,7 @@ fn parse_group(line: &str) -> Group {
         }
     }
 
-    let items = parse_items(item_block.join("\n").as_str());
+    let items = parse_items(&item_block);
 
     Group {
         heading: heading.to_string(),
@@ -168,33 +167,34 @@ fn parse_group(line: &str) -> Group {
     }
 }
 
-fn parse_items(line: &str) -> Vec<Item> {
+fn parse_items(lines: &[&str]) -> Vec<Item> {
     let mut items = vec![];
     let mut block = vec![];
-    for l in line.lines() {
-        if l.starts_with("- ") {
+    for line in lines {
+        if line.starts_with("- ") {
             if !block.is_empty() {
                 // 次ブロックを処理する前に溜めていたブロックをパースする
-                items.push(parse_item(block.join("\n").as_str()));
+                items.push(parse_item(&block));
             }
             block.clear();
-            block.push(l);
+            block.push(line);
         } else {
-            block.push(l);
+            block.push(line);
         }
     }
     if !block.is_empty() {
-        items.push(parse_item(block.join("\n").as_str()));
+        items.push(parse_item(&block));
     }
     items
 }
 
-fn parse_item(line: &str) -> Item {
-    let tokens = line.split_whitespace().collect::<Vec<_>>();
+fn parse_item(lines: &[&str]) -> Item {
+    let tokens = &lines[0].split_whitespace().collect::<Vec<_>>();
     let title = tokens[1];
     let id = tokens[2];
-    let status = line
-        .lines()
+    let status = lines
+        .iter() // linesに&は不要.イテレータは借用することを明示
+        .skip(1)
         .find_map(|l| l.trim().strip_prefix("状態::"))
         .map(str::trim)
         .and_then(|status_field| match status_field {
@@ -206,9 +206,8 @@ fn parse_item(line: &str) -> Item {
             _ => None,
         });
     let mut fields = vec![];
-    for l in line.lines().skip(1) {
-        let l = l.trim();
-        if let Some((k, v)) = l.split_once("::") {
+    for line in lines.iter().skip(1) {
+        if let Some((k, v)) = line.trim().split_once("::") {
             let key = k.trim().to_string();
             let value = v.trim().to_string();
             if key == "状態" {
@@ -232,8 +231,9 @@ mod tests {
 
     #[test]
     fn frontmatterからdateとtypeを取り出す() {
-        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n## 仕事管理";
-        let frontmatter = parse_frontmatter(raw);
+        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let frontmatter = parse_frontmatter(&lines);
 
         assert_eq!(
             frontmatter.date.date_naive(),
@@ -245,19 +245,12 @@ mod tests {
     #[test]
     fn date_type以外のキーはextraに格納する() {
         let raw = "---\ndate: 2026-06-26\ntype: logbook\nmood: 良い\n体調: 普通\n---";
-        let frontmatter = parse_frontmatter(raw);
+        let lines = raw.lines().collect::<Vec<_>>();
+        let frontmatter = parse_frontmatter(&lines);
 
         assert_eq!(frontmatter.extra.get("mood"), Some(&"良い".to_string()));
         assert_eq!(frontmatter.extra.get("体調"), Some(&"普通".to_string()));
         assert_eq!(frontmatter.extra.len(), 2);
-    }
-
-    #[test]
-    fn 本文の行はfrontmatterとして読まない() {
-        let raw = "---\ndate: 2026-06-26\ntype: logbook\n---\n## 仕事管理\n状態:: 待ち";
-        let frontmatter = parse_frontmatter(raw);
-
-        assert!(frontmatter.extra.is_empty());
     }
 
     #[test]
@@ -283,7 +276,8 @@ mod tests {
     #[test]
     fn 複数のレーンをパースしてレーンとグループの組み合わせができること() {
         let raw = "## 仕事管理\n### mugenup\n- 反社チェック確認 ^t-1\n  状態:: 待ち\n## 人間管理\n### 振り返り・気付き\n- 定例会で報告できた ^r-1\n  種別:: 良かった";
-        let lanes = parse_lanes(raw);
+        let lines = raw.lines().collect::<Vec<_>>();
+        let lanes = parse_lanes(&lines);
 
         assert_eq!(lanes.len(), 2);
         assert_eq!(lanes[0].title, "仕事管理");
@@ -297,7 +291,8 @@ mod tests {
     #[test]
     fn 単一のレーンとグループとアイテムをパースして各種要素が取り出せること() {
         let raw = "## 個人プロジェクト\n### test_group1\n- モデル設計 ^t-2\n  状態:: 着手中";
-        let lane = parse_lane(raw);
+        let lines = raw.lines().collect::<Vec<_>>();
+        let lane = parse_lane(&lines);
 
         assert_eq!(lane.title, "個人プロジェクト");
         assert_eq!(lane.groups.len(), 1);
@@ -311,7 +306,8 @@ mod tests {
     #[test]
     fn 複数のグループとアイテムをパースしてグループとアイテムの組み合わせができること() {
         let raw = "### test_group1\n- 資料確認 ^t-1\n  状態:: 待ち\n### test_group2\n- README確認 ^t-2\n  状態:: 着手中";
-        let groups = parse_groups(raw);
+        let lines = raw.lines().collect::<Vec<_>>();
+        let groups = parse_groups(&lines);
 
         assert_eq!(groups[0].heading, "test_group1");
         assert_eq!(groups[0].items.len(), 1);
@@ -322,7 +318,8 @@ mod tests {
     #[test]
     fn 単一のグループとアイテムをパースしてグループ1つとアイテム1つを取り出す() {
         let raw = "### test_group1\n- 資料確認 ^t-1\n  状態:: 待ち";
-        let group = parse_group(raw);
+        let lines = raw.lines().collect::<Vec<_>>();
+        let group = parse_group(&lines);
 
         assert_eq!(group.heading, "test_group1");
         assert_eq!(group.items.len(), 1);
@@ -330,7 +327,9 @@ mod tests {
 
     #[test]
     fn 単一のアイテム行からタイトルとidを取り出す() {
-        let item = parse_item("- ライブラリ調査 ^t-0701-1");
+        let raw = "- ライブラリ調査 ^t-0701-1";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let item = parse_item(&lines);
 
         assert_eq!(item.title, "ライブラリ調査");
         assert_eq!(item.id, "t-0701-1");
@@ -338,16 +337,19 @@ mod tests {
 
     #[test]
     fn 状態付きのアイテムから状態を取り出す() {
-        let item = parse_item("- 資料確認 ^t-0701-3\n  状態:: 待ち");
+        let raw = "- 資料確認 ^t-0701-3\n  状態:: 待ち";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let item = parse_item(&lines);
 
         assert_eq!(item.status, Some(Status::待ち));
     }
 
     #[test]
     fn 任意フィールドをfieldsに順序保持で格納する() {
-        let item = parse_item(
-            "- タスク着手前に目的を再確認した ^r-0701-1\n  種別:: 良かった\n  なぜ:: 確認するため",
-        );
+        let raw =
+            "- タスク着手前に目的を再確認した ^r-0701-1\n  種別:: 良かった\n  なぜ:: 確認するため";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let item = parse_item(&lines);
 
         assert_eq!(
             item.fields,
@@ -360,7 +362,9 @@ mod tests {
 
     #[test]
     fn 状態はfieldsに含めない() {
-        let item = parse_item("- x ^t-1\n  状態:: 待ち\n  種別:: 良かった");
+        let raw = "- x ^t-1\n  状態:: 待ち\n  種別:: 良かった";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let item = parse_item(&lines);
 
         assert_eq!(item.status, Some(Status::待ち));
         assert_eq!(
@@ -371,8 +375,9 @@ mod tests {
 
     #[test]
     fn 複数のアイテムを分割してそれぞれパースする() {
-        let items =
-            parse_items("- ライブラリ調査 ^t-1\n  状態:: 着手中\n- 設定修正 ^t-2\n  状態:: 未着手");
+        let raw = "- ライブラリ調査 ^t-1\n  状態:: 着手中\n- 設定修正 ^t-2\n  状態:: 未着手";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let items = parse_items(&lines);
 
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].id, "t-1");
@@ -383,14 +388,18 @@ mod tests {
 
     #[test]
     fn フィールドが複数行あってもアイテムは1つ生成される() {
-        let items = parse_items("- タスク ^t-1\n  状態:: 着手中\n  ゴール:: 確認する");
+        let raw = "- タスク ^t-1\n  状態:: 着手中\n  ゴール:: 確認する";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let items = parse_items(&lines);
 
         assert_eq!(items.len(), 1);
     }
 
     #[test]
     fn フィールドが無い場合でもアイテムは1つ生成される() {
-        let items = parse_items("- タスク ^t-1");
+        let raw = "- タスク ^t-1";
+        let lines = raw.lines().collect::<Vec<_>>();
+        let items = parse_items(&lines);
 
         assert_eq!(items.len(), 1);
     }

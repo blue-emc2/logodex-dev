@@ -16,6 +16,7 @@ pub struct Logbook {
     pub lanes: Vec<Lane>,
 }
 
+#[derive(Debug)]
 pub struct Frontmatter {
     pub date: DateTime<Local>,
     pub kind: String,
