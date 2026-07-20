@@ -1,4 +1,7 @@
-use crate::model::{Group, Item, Lane, Status};
+use crate::{
+    app::parser,
+    model::{Group, Item, Lane, Logbook, Status},
+};
 
 use gpui::{
     App, Application, Bounds, Context, FontWeight, Rgba, Window, WindowBounds, WindowOptions, div,
@@ -7,7 +10,7 @@ use gpui::{
 
 pub struct Logodex;
 struct LogodexWindow {
-    lanes: Vec<Lane>,
+    log_book: Logbook,
 }
 
 impl Render for LogodexWindow {
@@ -20,7 +23,7 @@ impl Render for LogodexWindow {
             .flex_row()
             .gap_3()
             .p_4()
-            .children(self.lanes.iter().map(render_lane))
+            .children(self.log_book.lanes.iter().map(render_lane))
     }
 }
 
@@ -107,78 +110,52 @@ fn render_item(item: &Item) -> impl IntoElement {
     }
 }
 
-fn mock_lanes() -> Vec<Lane> {
-    vec![
-        Lane {
-            title: "仕事管理".into(),
-            groups: vec![
-                Group {
-                    heading: "acme".into(),
-                    items: vec![
-                        Item {
-                            id: "t-0701-1".into(),
-                            title: "ライブラリ調査".into(),
-                            status: Some(Status::未着手),
-                            fields: vec![],
-                        },
-                        Item {
-                            id: "t-0701-2".into(),
-                            title: "バージョンアップ対応".into(),
-                            status: Some(Status::着手中),
-                            fields: vec![],
-                        },
-                    ],
-                },
-                Group {
-                    heading: "社内".into(),
-                    items: vec![
-                        Item {
-                            id: "t-0701-3".into(),
-                            title: "資料レビュー".into(),
-                            status: Some(Status::待ち),
-                            fields: vec![],
-                        },
-                        Item {
-                            id: "t-0701-4".into(),
-                            title: "サンプル機能を追加".into(),
-                            status: Some(Status::順延),
-                            fields: vec![],
-                        },
-                        Item {
-                            id: "t-0701-5".into(),
-                            title: "週報まとめ".into(),
-                            status: Some(Status::完了),
-                            fields: vec![],
-                        },
-                    ],
-                },
-            ],
-        },
-        Lane {
-            title: "人間管理".into(),
-            groups: vec![Group {
-                heading: "振り返り・気付き".into(),
-                items: vec![Item {
-                    id: "t-0701-6".into(),
-                    title: "定例会で報告できた".into(),
-                    status: Some(Status::着手中),
-                    fields: vec![],
-                }],
-            }],
-        },
-        Lane {
-            title: "シークレット".into(),
-            groups: vec![Group {
-                heading: "（後で統合）".into(),
-                items: vec![Item {
-                    id: "t-0701-7".into(),
-                    title: "……".into(),
-                    status: None,
-                    fields: vec![],
-                }],
-            }],
-        },
-    ]
+fn mock_raw() -> &'static str {
+    r#"---
+    date: 2026-06-26
+    type: logbook
+    mood: 天気のせいか足が痛む
+    ---
+
+    ## 仕事管理
+
+    ### mugenup
+    - 反社チェック確認 ^t-abc123
+      状態:: 待ち
+      ゴール:: チェック状況を確認し、未実施なら実施
+    - 定例会で REDIS 調査結果を報告 ^t-def456
+      状態:: 完了
+      完了:: 10:37
+    - 精算バッチのエラー調査 ^t-jkl012
+      状態:: 着手中
+
+    ### 社内
+    - 精算処理系を追加 ^t-ghi789
+      状態:: 完了
+      完了:: 15:20
+    - 経費精算を出す ^t-mno345
+      状態:: 未着手
+    - 勉強会の日程調整 ^t-pqr678
+      状態:: 順延
+      メモ:: 来週に持ち越し
+
+    ## 人間管理
+
+    ### 振り返り・気付き
+    - 定例会で結果を伝えられた ^r-001
+      種別:: 良かった
+      なぜ:: 事前に練習した
+      習慣化:: 事前準備
+    - タスクを詰め込みすぎた ^r-002
+      種別:: 改善したい
+
+    ### 気分・体調
+    - 足が痛む（天候由来）。無理せず ^m-001
+
+    ### やりたいこと
+    - 『いい質問が人を動かす』読書感想 ^w-001
+      状態:: 未着手
+    "#
 }
 
 impl Logodex {
@@ -192,12 +169,17 @@ impl Logodex {
                 },
                 |_, cx| {
                     cx.new(|_| LogodexWindow {
-                        lanes: mock_lanes(),
+                        log_book: Self::parse_logbook(),
                     })
                 },
             )
             .unwrap();
             cx.activate(true);
         });
+    }
+
+    fn parse_logbook() -> Logbook {
+        let dummy_text = mock_raw();
+        parser::parse(dummy_text)
     }
 }

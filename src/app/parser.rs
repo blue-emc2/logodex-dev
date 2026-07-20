@@ -10,14 +10,15 @@ enum ParseState {
     Body,
 }
 
-fn parse(raw: &str) -> Logbook {
+pub fn parse(raw: &str) -> Logbook {
     let mut state = ParseState::BeforeFrontmatter;
     let mut blocks = vec![];
     let mut body_blocks = vec![];
 
-    for line in raw.lines() {
+    for l in raw.lines() {
+        let line = l.trim_start();
         match &state {
-            ParseState::BeforeFrontmatter if line.trim() == "---" => {
+            ParseState::BeforeFrontmatter if line == "---" => {
                 blocks.push(line);
                 state = ParseState::InFrontmatter
             }
@@ -27,7 +28,7 @@ fn parse(raw: &str) -> Logbook {
                 if line.trim() == "---" {
                     state = ParseState::Body
                 }
-                blocks.push(line.trim())
+                blocks.push(line)
             }
             ParseState::Body => {
                 body_blocks.push(line);
@@ -85,8 +86,13 @@ fn parse_frontmatter(header_text: &[&str]) -> Frontmatter {
 fn parse_lanes(lines: &[&str]) -> Vec<Lane> {
     let mut lanes = vec![];
     let mut lane_block = vec![];
+    let lines: Vec<&str> = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .copied()
+        .collect();
 
-    for &line in lines {
+    for line in &lines {
         if line.starts_with("##") && !line.starts_with("### ") {
             if !lane_block.is_empty() {
                 lanes.push(parse_lane(&lane_block));
